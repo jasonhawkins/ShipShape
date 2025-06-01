@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Observation
 import JWTKit
 
 struct ASCLogEntry: Identifiable {
@@ -33,6 +34,9 @@ class ASCClient {
     /// The URLSession-compatible type to use for networking.
     var session: any URLSessionProtocol
 
+    @ObservationIgnored
+    var networkClient: NetworkClient
+
     /// Error message when connection or decoding fails.
     var errorMessage = ""
 
@@ -41,11 +45,20 @@ class ASCClient {
 
     var logEntries = [ASCLogEntry]()
 
-    init(key: String, keyID: String, issuerID: String, session: any URLSessionProtocol = URLSession.shared) {
+    init(
+        key: String,
+        keyID: String,
+        issuerID: String,
+        session: any URLSessionProtocol = URLSession.shared,
+        networkClient: @autoclosure @escaping () -> NetworkClient = NetworkClient { request in
+            try await URLSession.shared.data(for: request)
+        }
+    ) {
         self.key = key
         self.keyID = keyID
         self.issuerID = issuerID
         self.session = session
+        self.networkClient = networkClient()
     }
 
     /// Checks whether the connection to App Store Connect is successful.
@@ -58,11 +71,8 @@ class ASCClient {
 
         var request = URLRequest(url: url)
         request.setValue("Bearer \(jwt)", forHTTPHeaderField: "authorization")
-        let (_, urlResponse) = try await session.data(for: request, delegate: nil)
 
-        guard let httpResponse = urlResponse as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
-        }
+        let httpResponse = try await self.networkClient.getResponse(for: request)
 
         guard (200...299).contains(httpResponse.statusCode) else {
             errorMessage = "Failed to connect to App Store Connect: \(httpResponse.statusCode)"
@@ -82,31 +92,17 @@ class ASCClient {
 
         var request = URLRequest(url: url)
         request.setValue("Bearer \(jwt)", forHTTPHeaderField: "authorization")
-        let (result, _) = try await session.data(for: request, delegate: nil)
+        let data = try await self.networkClient.getData(for: request, ofType: type.self)
 
         // Log the JSON we get back, for inspection purposes.
-        if let stringResult = String(data: result, encoding: .utf8) {
-            logger.debug("\(stringResult)")
+        // swiftlint:disable:next non_optional_string_data_conversion
+        if let stringResult = String(data: data, encoding: .utf8) {
+            print(stringResult)
 
-            let logEntry = ASCLogEntry(url: urlString, response: stringResult)
-            logEntries.insert(logEntry, at: 0)
-        }
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-
-        do {
-            return try decoder.decode(T.self, from: result)
-        } catch DecodingError.keyNotFound(let key, let context) {
-            fatalError("Failed to decode due to missing key '\(key)' - \(context.debugDescription)")
-        } catch DecodingError.typeMismatch(_, let context) {
-            fatalError("Failed to decode due to type mismatch - \(context.debugDescription)")
-        } catch DecodingError.valueNotFound(let type, let context) {
-            fatalError("Failed to decode due to missing \(type) value - \(context.debugDescription)")
-        } catch DecodingError.dataCorrupted(let context) {
-            fatalError("Failed to decode: it appears to be invalid JSON: \(context)")
-        } catch {
-            fatalError("Failed to decode: \(error.localizedDescription)")
+            logEntries.insert(
+                ASCLogEntry(url: urlString,response: stringResult),
+                at: 0
+            )
         }
     }
 
