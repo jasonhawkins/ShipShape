@@ -1,0 +1,29 @@
+{
+  "configurations" : [
+    {
+      "id" : "0646551D-17C8-47B2-91A8-C11A9E42256E",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:ShipShape.xcodeproj",
+      "identifier" : "51616E6D2DD8EDE8007B8250",
+      "name" : "ShipShape"
+    }
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:ShipShape.xcodeproj",
+        "identifier" : "517283BB2DDCD6D40064D974",
+        "name" : "ShipShapeTests"
+      }
+    }
+  ],
+  "version" : 1
+}
